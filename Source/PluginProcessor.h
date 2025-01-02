@@ -9,6 +9,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "Delay.hpp"
 
 //==============================================================================
 /**
@@ -55,5 +56,11 @@ public:
 
 private:
     //==============================================================================
+    int delayBufferPos = 0;
+    int delayMilliseconds;
+    int sr;
+    juce::AudioBuffer<float> delayBuffer;
+    
+    
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (NewProjectAudioProcessor)
 };

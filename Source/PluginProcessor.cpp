@@ -8,7 +8,6 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#include "Delay.hpp"
 
 //==============================================================================
 NewProjectAudioProcessor::NewProjectAudioProcessor()
@@ -23,6 +22,12 @@ NewProjectAudioProcessor::NewProjectAudioProcessor()
                        )
 #endif
 {
+    addParameter(new juce::AudioParameterFloat("gain", "Gain", 0.0f, 1.0f, 1.0f));
+    addParameter(new juce::AudioParameterFloat("feedback", "Delay Feedback", 0.0f, 1.0f, 0.35f));
+    addParameter(new juce::AudioParameterFloat("time", "Delay Time", 0.0f, 1.0f, 0.35f));
+    addParameter(new juce::AudioParameterFloat("mix", "Dry / Wet", 0.0f, 1.0f, 0.5f));
+
+
 }
 
 NewProjectAudioProcessor::~NewProjectAudioProcessor()
@@ -96,12 +101,13 @@ void NewProjectAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
 {
     // Use this method as the place to do any pre-playback
     // initialisation that you need..
-    
-    //initialize delay
-    auto totalNumInputChannels  = getTotalNumInputChannels();
-    Delay<float>* delays; //one for each channel
-    
-    Delay<float> delay(sampleRate, 1);
+    sr = sampleRate;
+    int delayMillisecondsMax = 200;
+    delayMilliseconds = delayMillisecondsMax; //for now
+    auto delaySamples = (int) std::round(sampleRate * delayMillisecondsMax / 1000.0);
+    delayBuffer.setSize(2, delaySamples);
+    delayBuffer.clear();
+    delayBufferPos = 0;
 }
 
 void NewProjectAudioProcessor::releaseResources()
@@ -157,15 +163,43 @@ void NewProjectAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     // the samples and the outer loop is handling the channels.
     // Alternatively, you can process the samples with the channels
     // interleaved by keeping the same state.
+    
+    auto& parameters = getParameters();
+    float gain = parameters[0]->getValue();
+    float feedback = parameters[1]->getValue();
+    float delayTime = parameters[2]->getValue();
+    float mix = parameters[3]->getValue();
+    
+    delayMilliseconds = (int) std::round(sr * delayTime / 1000.0);
+    int delayBufferSize = delayBuffer.getNumSamples();
+
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
         auto* channelData = buffer.getWritePointer (channel);
+        int delayPos = delayBufferPos;
 
         // ..do something to the data...
-        for (int i = 0; i < buffer.getNumSamples(); i++) {
+        for (int i = 0; i < buffer.getNumSamples(); ++i) {
             //delay sound
-            channelData[i] = 0; //CHANGE
+            //channelData[i] *= (buffer.getNumSamples()-i)/buffer.getNumSamples(); //CHANGE
+            float drySample = channelData[i];
+            
+            float delaySample = delayBuffer.getSample(channel, delayPos) * feedback;
+            delayBuffer.setSample(channel, delayPos, drySample + delaySample);
+            
+            delayPos++;
+            if (delayPos == delayBuffer.getNumSamples()) {
+                delayPos = 0;
+            }
+            
+            channelData[i] = (drySample*(1.0f - mix)) + (delaySample*mix);
+            channelData[i] *= gain;
         }
+    }
+    
+    delayBufferPos += buffer.getNumSamples();
+    if (delayBufferPos >= delayBufferSize) {
+        delayBufferPos -= delayBufferSize;
     }
 }
 
@@ -177,7 +211,8 @@ bool NewProjectAudioProcessor::hasEditor() const
 
 juce::AudioProcessorEditor* NewProjectAudioProcessor::createEditor()
 {
-    return new NewProjectAudioProcessorEditor (*this);
+//    return new NewProjectAudioProcessorEditor (*this);
+    return new juce::GenericAudioProcessorEditor(*this);
 }
 
 //==============================================================================

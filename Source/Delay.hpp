@@ -5,6 +5,8 @@
 //  Created by Henry Vandermillen on 1/1/25.
 //
 
+#pragma once
+
 #ifndef Delay_hpp
 #define Delay_hpp
 
